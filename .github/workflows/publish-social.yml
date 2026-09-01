@@ -85,6 +85,9 @@ jobs:
             git push origin HEAD:main
           fi
 
+          # Use the exact commit that now contains all generated public assets.
+          echo "PUBLISH_ASSET_REF=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
       - name: Publish approved request(s)
         shell: bash
         env:
