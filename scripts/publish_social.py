@@ -53,6 +53,13 @@ def graph_request(method, graph_version, endpoint, token, params=None):
     return data
 
 
+def try_graph_get(graph_version, endpoint, token, params=None):
+    try:
+        return graph_request("GET", graph_version, endpoint, token, params)
+    except RuntimeError:
+        return None
+
+
 def verify_public_image(url):
     if not url.startswith("https://"):
         fail("image_url must use HTTPS")
@@ -113,6 +120,37 @@ def preflight(config, token):
     return version
 
 
+def resolve_page_access_token(config, version, system_token):
+    page_id = config["facebook_page_id"]
+
+    direct = try_graph_get(
+        version,
+        page_id,
+        system_token,
+        {"fields": "id,name,access_token"},
+    )
+    if direct and direct.get("access_token"):
+        return direct["access_token"]
+
+    for edge in ("me/accounts", "me/assigned_pages"):
+        data = try_graph_get(
+            version,
+            edge,
+            system_token,
+            {"fields": "id,name,access_token,tasks", "limit": "100"},
+        )
+        if not data:
+            continue
+        for page in data.get("data", []):
+            if str(page.get("id")) == str(page_id) and page.get("access_token"):
+                return page["access_token"]
+
+    fail(
+        "Facebook Page access token could not be derived from the configured system-user token. "
+        "The Page is assigned and readable, but Facebook publishing requires a Page access token."
+    )
+
+
 def publish_instagram(config, version, token, image_url, caption):
     ig_id = config["instagram_business_account_id"]
     created = graph_request(
@@ -158,13 +196,14 @@ def publish_instagram(config, version, token, image_url, caption):
     return {"container_id": container_id, "media_id": media_id, "status": "PUBLISHED"}
 
 
-def publish_facebook(config, version, token, image_url, caption):
+def publish_facebook(config, version, system_token, image_url, caption):
     page_id = config["facebook_page_id"]
+    page_token = resolve_page_access_token(config, version, system_token)
     published = graph_request(
         "POST",
         version,
         f"{page_id}/photos",
-        token,
+        page_token,
         {"url": image_url, "caption": caption, "published": "true"},
     )
     photo_id = published.get("id") or published.get("post_id")
@@ -219,10 +258,12 @@ def main():
     if "instagram" in targets:
         results["instagram"] = publish_instagram(config, version, token, image_url, caption)
         print("Instagram publication succeeded")
+        print("INSTAGRAM_RESULT=" + json.dumps(results["instagram"], ensure_ascii=False))
 
     if "facebook" in targets:
         results["facebook"] = publish_facebook(config, version, token, image_url, caption)
         print("Facebook publication succeeded")
+        print("FACEBOOK_RESULT=" + json.dumps(results["facebook"], ensure_ascii=False))
 
     print("RESULT_JSON=" + json.dumps(results, ensure_ascii=False))
     return 0
