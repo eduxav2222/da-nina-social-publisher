@@ -1,0 +1,80 @@
+name: Publish Da Nina Social Post
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'publish/requests/*.json'
+  workflow_dispatch:
+    inputs:
+      request_file:
+        description: 'Existing request JSON to publish'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: da-nina-social-publisher
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Determine request files
+        id: requests
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MANUAL_REQUEST: ${{ inputs.request_file }}
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          : > /tmp/da_nina_requests.txt
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            if [[ -z "$MANUAL_REQUEST" ]]; then
+              echo "Manual request_file cannot be empty" >&2
+              exit 1
+            fi
+            printf '%s\n' "$MANUAL_REQUEST" >> /tmp/da_nina_requests.txt
+          else
+            git diff --name-only "$BEFORE_SHA" "$CURRENT_SHA" -- 'publish/requests/*.json' > /tmp/da_nina_requests.txt
+          fi
+
+          echo "Request files to process:"
+          cat /tmp/da_nina_requests.txt
+
+      - name: Publish approved request(s)
+        shell: bash
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r request_file; do
+            [[ -z "$request_file" ]] && continue
+            if [[ "$request_file" != publish/requests/*.json ]]; then
+              echo "Refusing unsafe request path: $request_file" >&2
+              exit 1
+            fi
+            echo "Processing $request_file"
+            python scripts/publish_social.py "$request_file"
+          done < /tmp/da_nina_requests.txt
