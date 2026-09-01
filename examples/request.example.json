@@ -1,0 +1,11 @@
+{
+  "approved_by_user": true,
+  "publish_mode": "live",
+  "confirmation": "PUBLISH_DA_NINA",
+  "image_path": "public/example-post.jpg",
+  "caption": "Approved customer-facing caption goes here.",
+  "targets": [
+    "instagram",
+    "facebook"
+  ]
+}
