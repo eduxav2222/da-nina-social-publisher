@@ -2,10 +2,40 @@
   "approved_by_user": true,
   "publish_mode": "live",
   "confirmation": "PUBLISH_DA_NINA",
-  "image_path": "public/example-post.jpg",
   "caption": "Approved customer-facing caption goes here.",
   "targets": [
     "instagram",
-    "facebook"
-  ]
+    "facebook",
+    "instagram_story",
+    "facebook_story"
+  ],
+  "source_image_url": "https://daninas.com/path/to/approved-source.png",
+  "generated_images": [
+    {
+      "image_transform": "popup_1024x1536_to_instagram_4x5_v1",
+      "generated_image_path": "public/example-instagram-4x5.jpg"
+    },
+    {
+      "image_transform": "popup_1024x1536_to_facebook_1x1_v1",
+      "generated_image_path": "public/example-facebook-1x1.jpg"
+    },
+    {
+      "image_transform": "popup_1024x1536_to_story_9x16_v1",
+      "generated_image_path": "public/example-story-9x16.jpg"
+    }
+  ],
+  "platform_images": {
+    "instagram": {
+      "image_path": "public/example-instagram-4x5.jpg"
+    },
+    "facebook": {
+      "image_path": "public/example-facebook-1x1.jpg"
+    },
+    "instagram_story": {
+      "image_path": "public/example-story-9x16.jpg"
+    },
+    "facebook_story": {
+      "image_path": "public/example-story-9x16.jpg"
+    }
+  }
 }
