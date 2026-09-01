@@ -1,0 +1,10 @@
+{
+  "approved_by_user": true,
+  "publish_mode": "live",
+  "confirmation": "PUBLISH_DA_NINA",
+  "targets": ["instagram_story", "facebook_story"],
+  "source_image_url": "https://daninas.com/wp-content/uploads/2026/08/ChatGPT-Image-Aug-31-2026-07_58_51-PM.png",
+  "image_transform": "popup_1024x1536_to_story_9x16_v1",
+  "generated_image_path": "public/pasta-nights-2026-09-01-story-9x16.jpg",
+  "image_url": "https://raw.githubusercontent.com/eduxav2222/da-nina-social-publisher/main/public/pasta-nights-2026-09-01-story-9x16.jpg"
+}
