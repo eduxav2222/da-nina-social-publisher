@@ -46,18 +46,32 @@ def download_source(url, destination):
         destination.write_bytes(response.read())
 
 
-def transform_popup_to_instagram_4x5(source, output):
-    with Image.open(source) as img:
-        img = img.convert("RGB")
-        if img.size != (1024, 1536):
-            fail(f"Unexpected popup source dimensions: {img.size}; expected 1024x1536")
+def open_expected_popup(source):
+    img = Image.open(source).convert("RGB")
+    if img.size != (1024, 1536):
+        img.close()
+        fail(f"Unexpected popup source dimensions: {img.size}; expected 1024x1536")
+    return img
 
-        # This exactly matches the user-approved preview transformation:
+
+def transform_popup_to_instagram_4x5(source, output):
+    with open_expected_popup(source) as img:
+        # Exactly matches the user-approved feed preview transformation:
         # crop 24 px from the top, preserve the next 1280 px, then resize to 1080x1350.
         cropped = img.crop((0, 24, 1024, 1304))
         social = cropped.resize((1080, 1350), Image.Resampling.LANCZOS)
         output.parent.mkdir(parents=True, exist_ok=True)
         social.save(output, "JPEG", quality=95, subsampling=0, optimize=True)
+
+
+def transform_popup_to_story_9x16(source, output):
+    with open_expected_popup(source) as img:
+        # Story-safe 9:16 full-bleed version. Preserve the complete left-side offer/text
+        # and crop only the far-right decorative portion of the approved popup artwork.
+        cropped = img.crop((0, 0, 864, 1536))
+        story = cropped.resize((1080, 1920), Image.Resampling.LANCZOS)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        story.save(output, "JPEG", quality=95, subsampling=0, optimize=True)
 
 
 def main():
@@ -77,14 +91,20 @@ def main():
         return 0
     if not generated_path:
         fail("generated_image_path is required when source_image_url is used")
-    if transform != "popup_1024x1536_to_instagram_4x5_v1":
+
+    transforms = {
+        "popup_1024x1536_to_instagram_4x5_v1": transform_popup_to_instagram_4x5,
+        "popup_1024x1536_to_story_9x16_v1": transform_popup_to_story_9x16,
+    }
+    transform_fn = transforms.get(transform)
+    if not transform_fn:
         fail("Unsupported image_transform")
 
     output = ROOT / safe_public_path(generated_path)
     temp = ROOT / ".tmp_da_nina_source_image"
     try:
         download_source(source_url, temp)
-        transform_popup_to_instagram_4x5(temp, output)
+        transform_fn(temp, output)
     finally:
         temp.unlink(missing_ok=True)
 
