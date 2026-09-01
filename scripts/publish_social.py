@@ -151,6 +151,28 @@ def resolve_page_access_token(config, version, system_token):
     )
 
 
+def wait_instagram_container(version, token, container_id):
+    for attempt in range(21):
+        status = graph_request(
+            "GET",
+            version,
+            container_id,
+            token,
+            {"fields": "status_code,status"},
+        )
+        code = status.get("status_code")
+        if code == "FINISHED":
+            return status
+        if code == "PUBLISHED":
+            return status
+        if code in {"ERROR", "EXPIRED"}:
+            fail(f"Instagram container failed: {json.dumps(status, ensure_ascii=False)}")
+        if attempt == 20:
+            fail(f"Instagram container was not ready after 5 minutes: {json.dumps(status, ensure_ascii=False)}")
+        time.sleep(15)
+    fail("Instagram container wait ended unexpectedly")
+
+
 def publish_instagram(config, version, token, image_url, caption):
     ig_id = config["instagram_business_account_id"]
     created = graph_request(
@@ -164,24 +186,9 @@ def publish_instagram(config, version, token, image_url, caption):
     if not container_id:
         fail("Instagram did not return a media container ID")
 
-    for attempt in range(21):
-        status = graph_request(
-            "GET",
-            version,
-            container_id,
-            token,
-            {"fields": "status_code,status"},
-        )
-        code = status.get("status_code")
-        if code == "FINISHED":
-            break
-        if code == "PUBLISHED":
-            return {"container_id": container_id, "media_id": container_id, "status": code}
-        if code in {"ERROR", "EXPIRED"}:
-            fail(f"Instagram container failed: {json.dumps(status, ensure_ascii=False)}")
-        if attempt == 20:
-            fail(f"Instagram container was not ready after 5 minutes: {json.dumps(status, ensure_ascii=False)}")
-        time.sleep(15)
+    status = wait_instagram_container(version, token, container_id)
+    if status.get("status_code") == "PUBLISHED":
+        return {"container_id": container_id, "media_id": container_id, "status": "PUBLISHED"}
 
     published = graph_request(
         "POST",
@@ -193,6 +200,36 @@ def publish_instagram(config, version, token, image_url, caption):
     media_id = published.get("id")
     if not media_id:
         fail("Instagram media_publish did not return a media ID")
+    return {"container_id": container_id, "media_id": media_id, "status": "PUBLISHED"}
+
+
+def publish_instagram_story(config, version, token, image_url):
+    ig_id = config["instagram_business_account_id"]
+    created = graph_request(
+        "POST",
+        version,
+        f"{ig_id}/media",
+        token,
+        {"image_url": image_url, "media_type": "STORIES"},
+    )
+    container_id = created.get("id")
+    if not container_id:
+        fail("Instagram Story did not return a media container ID")
+
+    status = wait_instagram_container(version, token, container_id)
+    if status.get("status_code") == "PUBLISHED":
+        return {"container_id": container_id, "media_id": container_id, "status": "PUBLISHED"}
+
+    published = graph_request(
+        "POST",
+        version,
+        f"{ig_id}/media_publish",
+        token,
+        {"creation_id": container_id},
+    )
+    media_id = published.get("id")
+    if not media_id:
+        fail("Instagram Story media_publish did not return a media ID")
     return {"container_id": container_id, "media_id": media_id, "status": "PUBLISHED"}
 
 
@@ -210,6 +247,51 @@ def publish_facebook(config, version, system_token, image_url, caption):
     if not photo_id:
         fail(f"Facebook did not return a photo/post ID: {json.dumps(published, ensure_ascii=False)}")
     return published
+
+
+def publish_facebook_story(config, version, system_token, image_url):
+    page_id = config["facebook_page_id"]
+    page_token = resolve_page_access_token(config, version, system_token)
+
+    uploaded = graph_request(
+        "POST",
+        version,
+        f"{page_id}/photos",
+        page_token,
+        {"url": image_url, "published": "false"},
+    )
+    photo_id = uploaded.get("id")
+    if not photo_id:
+        fail(f"Facebook Story photo upload did not return a photo ID: {json.dumps(uploaded, ensure_ascii=False)}")
+
+    published = graph_request(
+        "POST",
+        version,
+        f"{page_id}/photo_stories",
+        page_token,
+        {"photo_id": photo_id},
+    )
+    if published.get("success") is not True and not published.get("post_id"):
+        fail(f"Facebook Story publish did not confirm success: {json.dumps(published, ensure_ascii=False)}")
+
+    result = dict(published)
+    result["photo_id"] = photo_id
+
+    post_id = published.get("post_id")
+    stories = try_graph_get(
+        version,
+        f"{page_id}/stories",
+        page_token,
+        {"fields": "status,creation_time,media_id,post_id,url", "limit": "25"},
+    )
+    if stories and post_id:
+        for story in stories.get("data", []):
+            if str(story.get("post_id")) == str(post_id):
+                result["story_status"] = story.get("status")
+                result["story_url"] = story.get("url")
+                result["media_id"] = story.get("media_id")
+                break
+    return result
 
 
 def main():
@@ -231,17 +313,17 @@ def main():
     if request_data.get("confirmation") != "PUBLISH_DA_NINA":
         fail("Safety check failed: confirmation must equal PUBLISH_DA_NINA")
 
-    caption = request_data.get("caption", "").strip()
-    if not caption:
-        fail("caption cannot be empty")
-
     targets = request_data.get("targets", [])
     if not isinstance(targets, list) or not targets:
         fail("targets must be a non-empty list")
-    allowed = {"instagram", "facebook"}
+    allowed = {"instagram", "facebook", "instagram_story", "facebook_story"}
     unknown = set(targets) - allowed
     if unknown:
         fail(f"Unsupported targets: {sorted(unknown)}")
+
+    caption = request_data.get("caption", "").strip()
+    if any(target in targets for target in ("instagram", "facebook")) and not caption:
+        fail("caption cannot be empty for feed publications")
 
     token = os.environ.get("META_ACCESS_TOKEN")
     if not token:
@@ -264,6 +346,16 @@ def main():
         results["facebook"] = publish_facebook(config, version, token, image_url, caption)
         print("Facebook publication succeeded")
         print("FACEBOOK_RESULT=" + json.dumps(results["facebook"], ensure_ascii=False))
+
+    if "instagram_story" in targets:
+        results["instagram_story"] = publish_instagram_story(config, version, token, image_url)
+        print("Instagram Story publication succeeded")
+        print("INSTAGRAM_STORY_RESULT=" + json.dumps(results["instagram_story"], ensure_ascii=False))
+
+    if "facebook_story" in targets:
+        results["facebook_story"] = publish_facebook_story(config, version, token, image_url)
+        print("Facebook Story publication succeeded")
+        print("FACEBOOK_STORY_RESULT=" + json.dumps(results["facebook_story"], ensure_ascii=False))
 
     print("RESULT_JSON=" + json.dumps(results, ensure_ascii=False))
     return 0
