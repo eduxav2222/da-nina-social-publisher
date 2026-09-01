@@ -49,29 +49,70 @@ def download_source(url, destination):
 def open_expected_popup(source):
     img = Image.open(source).convert("RGB")
     if img.size != (1024, 1536):
+        actual = img.size
         img.close()
-        fail(f"Unexpected popup source dimensions: {img.size}; expected 1024x1536")
+        fail(f"Unexpected popup source dimensions: {actual}; expected 1024x1536")
     return img
+
+
+def save_jpeg(img, output, size):
+    rendered = img.resize(size, Image.Resampling.LANCZOS)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    rendered.save(output, "JPEG", quality=95, subsampling=0, optimize=True)
 
 
 def transform_popup_to_instagram_4x5(source, output):
     with open_expected_popup(source) as img:
-        # Exactly matches the user-approved feed preview transformation:
-        # crop 24 px from the top, preserve the next 1280 px, then resize to 1080x1350.
+        # Matches the approved Instagram feed preview.
         cropped = img.crop((0, 24, 1024, 1304))
-        social = cropped.resize((1080, 1350), Image.Resampling.LANCZOS)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        social.save(output, "JPEG", quality=95, subsampling=0, optimize=True)
+        save_jpeg(cropped, output, (1080, 1350))
+
+
+def transform_popup_to_facebook_1x1(source, output):
+    with open_expected_popup(source) as img:
+        # Facebook feed square: full width, no side bars on wide desktop feed containers.
+        # Preserve the promotional headline/offer and principal food visual.
+        cropped = img.crop((0, 0, 1024, 1024))
+        save_jpeg(cropped, output, (1080, 1080))
 
 
 def transform_popup_to_story_9x16(source, output):
     with open_expected_popup(source) as img:
-        # Story-safe 9:16 full-bleed version. Preserve the complete left-side offer/text
-        # and crop only the far-right decorative portion of the approved popup artwork.
+        # Story-safe full-bleed 9:16 version.
         cropped = img.crop((0, 0, 864, 1536))
-        story = cropped.resize((1080, 1920), Image.Resampling.LANCZOS)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        story.save(output, "JPEG", quality=95, subsampling=0, optimize=True)
+        save_jpeg(cropped, output, (1080, 1920))
+
+
+TRANSFORMS = {
+    "popup_1024x1536_to_instagram_4x5_v1": transform_popup_to_instagram_4x5,
+    "popup_1024x1536_to_facebook_1x1_v1": transform_popup_to_facebook_1x1,
+    "popup_1024x1536_to_story_9x16_v1": transform_popup_to_story_9x16,
+}
+
+
+def generate_one(spec, default_source_url, index):
+    source_url = spec.get("source_image_url") or default_source_url
+    generated_path = spec.get("generated_image_path")
+    transform = spec.get("image_transform")
+
+    if not source_url:
+        fail(f"generated_images[{index}] is missing source_image_url")
+    if not generated_path:
+        fail(f"generated_images[{index}] is missing generated_image_path")
+
+    transform_fn = TRANSFORMS.get(transform)
+    if not transform_fn:
+        fail(f"Unsupported image_transform for generated_images[{index}]: {transform}")
+
+    output = ROOT / safe_public_path(generated_path)
+    temp = ROOT / f".tmp_da_nina_source_image_{index}"
+    try:
+        download_source(source_url, temp)
+        transform_fn(temp, output)
+    finally:
+        temp.unlink(missing_ok=True)
+
+    print(f"Generated approved social image: {generated_path}")
 
 
 def main():
@@ -82,6 +123,17 @@ def main():
     request_path = Path(sys.argv[1])
     data = load_json(request_path)
 
+    generated_images = data.get("generated_images")
+    if generated_images is not None:
+        if not isinstance(generated_images, list) or not generated_images:
+            fail("generated_images must be a non-empty list when supplied")
+        for index, spec in enumerate(generated_images):
+            if not isinstance(spec, dict):
+                fail(f"generated_images[{index}] must be an object")
+            generate_one(spec, data.get("source_image_url"), index)
+        return 0
+
+    # Backward-compatible single-image request format.
     source_url = data.get("source_image_url")
     generated_path = data.get("generated_image_path")
     transform = data.get("image_transform")
@@ -92,23 +144,15 @@ def main():
     if not generated_path:
         fail("generated_image_path is required when source_image_url is used")
 
-    transforms = {
-        "popup_1024x1536_to_instagram_4x5_v1": transform_popup_to_instagram_4x5,
-        "popup_1024x1536_to_story_9x16_v1": transform_popup_to_story_9x16,
-    }
-    transform_fn = transforms.get(transform)
-    if not transform_fn:
-        fail("Unsupported image_transform")
-
-    output = ROOT / safe_public_path(generated_path)
-    temp = ROOT / ".tmp_da_nina_source_image"
-    try:
-        download_source(source_url, temp)
-        transform_fn(temp, output)
-    finally:
-        temp.unlink(missing_ok=True)
-
-    print(f"Generated approved social image: {generated_path}")
+    generate_one(
+        {
+            "source_image_url": source_url,
+            "generated_image_path": generated_path,
+            "image_transform": transform,
+        },
+        None,
+        0,
+    )
     return 0
 
 
