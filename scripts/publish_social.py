@@ -62,7 +62,7 @@ def try_graph_get(graph_version, endpoint, token, params=None):
 
 def verify_public_image(url):
     if not url.startswith("https://"):
-        fail("image_url must use HTTPS")
+        fail("image URL must use HTTPS")
 
     last_error = None
     for _ in range(5):
@@ -80,18 +80,12 @@ def verify_public_image(url):
     fail(f"Public image could not be verified: {last_error}")
 
 
-def build_image_url(request_data):
-    if request_data.get("image_url"):
-        return request_data["image_url"]
-
-    image_path = request_data.get("image_path")
-    if not image_path:
-        fail("Request must contain image_path or image_url")
-
+def repository_image_url(image_path):
     normalized = Path(image_path)
     if normalized.is_absolute() or ".." in normalized.parts:
         fail("image_path must be a safe relative repository path")
-    if not str(normalized).replace("\\", "/").startswith("public/"):
+    normalized_text = str(normalized).replace("\\", "/")
+    if not normalized_text.startswith("public/"):
         fail("Automated repository images must be stored under public/")
 
     local_path = ROOT / normalized
@@ -99,12 +93,50 @@ def build_image_url(request_data):
         fail(f"Image file not found in checkout: {image_path}")
 
     repository = os.environ.get("GITHUB_REPOSITORY")
-    commit_sha = os.environ.get("GITHUB_SHA")
-    if not repository or not commit_sha:
-        fail("GITHUB_REPOSITORY and GITHUB_SHA are required")
+    asset_ref = os.environ.get("PUBLISH_ASSET_REF") or os.environ.get("GITHUB_SHA")
+    if not repository or not asset_ref:
+        fail("GITHUB_REPOSITORY and PUBLISH_ASSET_REF/GITHUB_SHA are required")
 
-    encoded_path = urllib.parse.quote(str(normalized).replace("\\", "/"), safe="/")
-    return f"https://raw.githubusercontent.com/{repository}/{commit_sha}/{encoded_path}"
+    encoded_path = urllib.parse.quote(normalized_text, safe="/")
+    return f"https://raw.githubusercontent.com/{repository}/{asset_ref}/{encoded_path}"
+
+
+def image_url_from_spec(spec, label):
+    if isinstance(spec, str):
+        if spec.startswith("https://"):
+            return spec
+        return repository_image_url(spec)
+
+    if not isinstance(spec, dict):
+        fail(f"{label} image specification must be a string or object")
+
+    image_url = spec.get("image_url")
+    if image_url:
+        return image_url
+
+    image_path = spec.get("image_path") or spec.get("generated_image_path")
+    if image_path:
+        return repository_image_url(image_path)
+
+    fail(f"{label} image specification must contain image_url or image_path")
+
+
+def resolve_target_image(request_data, target):
+    platform_images = request_data.get("platform_images")
+    if platform_images is not None:
+        if not isinstance(platform_images, dict):
+            fail("platform_images must be an object keyed by target")
+        if target in platform_images:
+            return image_url_from_spec(platform_images[target], f"platform_images.{target}")
+
+    if request_data.get("image_url"):
+        return request_data["image_url"]
+    if request_data.get("image_path"):
+        return repository_image_url(request_data["image_path"])
+    if request_data.get("generated_image_path"):
+        return repository_image_url(request_data["generated_image_path"])
+
+    fail(f"No image configured for target: {target}")
 
 
 def preflight(config, token):
@@ -161,9 +193,7 @@ def wait_instagram_container(version, token, container_id):
             {"fields": "status_code,status"},
         )
         code = status.get("status_code")
-        if code == "FINISHED":
-            return status
-        if code == "PUBLISHED":
+        if code in {"FINISHED", "PUBLISHED"}:
             return status
         if code in {"ERROR", "EXPIRED"}:
             fail(f"Instagram container failed: {json.dumps(status, ensure_ascii=False)}")
@@ -329,31 +359,33 @@ def main():
     if not token:
         fail("META_ACCESS_TOKEN GitHub Actions secret is not configured")
 
-    image_url = build_image_url(request_data)
-    print(f"Using public image URL: {image_url}")
-    verify_public_image(image_url)
+    target_images = {target: resolve_target_image(request_data, target) for target in targets}
+    for target, image_url in target_images.items():
+        print(f"Using image for {target}: {image_url}")
+    for image_url in sorted(set(target_images.values())):
+        verify_public_image(image_url)
 
     version = preflight(config, token)
     print(f"Meta preflight succeeded using Graph API {version}")
 
     results = {}
     if "instagram" in targets:
-        results["instagram"] = publish_instagram(config, version, token, image_url, caption)
+        results["instagram"] = publish_instagram(config, version, token, target_images["instagram"], caption)
         print("Instagram publication succeeded")
         print("INSTAGRAM_RESULT=" + json.dumps(results["instagram"], ensure_ascii=False))
 
     if "facebook" in targets:
-        results["facebook"] = publish_facebook(config, version, token, image_url, caption)
+        results["facebook"] = publish_facebook(config, version, token, target_images["facebook"], caption)
         print("Facebook publication succeeded")
         print("FACEBOOK_RESULT=" + json.dumps(results["facebook"], ensure_ascii=False))
 
     if "instagram_story" in targets:
-        results["instagram_story"] = publish_instagram_story(config, version, token, image_url)
+        results["instagram_story"] = publish_instagram_story(config, version, token, target_images["instagram_story"])
         print("Instagram Story publication succeeded")
         print("INSTAGRAM_STORY_RESULT=" + json.dumps(results["instagram_story"], ensure_ascii=False))
 
     if "facebook_story" in targets:
-        results["facebook_story"] = publish_facebook_story(config, version, token, image_url)
+        results["facebook_story"] = publish_facebook_story(config, version, token, target_images["facebook_story"])
         print("Facebook Story publication succeeded")
         print("FACEBOOK_STORY_RESULT=" + json.dumps(results["facebook_story"], ensure_ascii=False))
 
