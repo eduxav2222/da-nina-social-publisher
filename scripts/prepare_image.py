@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import base64
+import io
 import json
 import sys
 import urllib.parse
@@ -63,22 +65,18 @@ def save_jpeg(img, output, size):
 
 def transform_popup_to_instagram_4x5(source, output):
     with open_expected_popup(source) as img:
-        # Matches the approved Instagram feed preview.
         cropped = img.crop((0, 24, 1024, 1304))
         save_jpeg(cropped, output, (1080, 1350))
 
 
 def transform_popup_to_facebook_1x1(source, output):
     with open_expected_popup(source) as img:
-        # Facebook feed square: full width, no side bars on wide desktop feed containers.
-        # Preserve the promotional headline/offer and principal food visual.
         cropped = img.crop((0, 0, 1024, 1024))
         save_jpeg(cropped, output, (1080, 1080))
 
 
 def transform_popup_to_story_9x16(source, output):
     with open_expected_popup(source) as img:
-        # Story-safe full-bleed 9:16 version.
         cropped = img.crop((0, 0, 864, 1536))
         save_jpeg(cropped, output, (1080, 1920))
 
@@ -90,21 +88,48 @@ TRANSFORMS = {
 }
 
 
-def generate_one(spec, default_source_url, index):
-    source_url = spec.get("source_image_url") or default_source_url
-    generated_path = spec.get("generated_image_path")
-    transform = spec.get("image_transform")
+def materialize_embedded_base64(encoded, output, expected_size=None):
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except Exception as exc:
+        fail(f"Invalid embedded_base64: {exc}")
 
-    if not source_url:
-        fail(f"generated_images[{index}] is missing source_image_url")
+    try:
+        with Image.open(io.BytesIO(raw)) as img:
+            img.verify()
+        with Image.open(io.BytesIO(raw)) as img:
+            actual_size = list(img.size)
+    except Exception as exc:
+        fail(f"embedded_base64 is not a valid image: {exc}")
+
+    if expected_size is not None and actual_size != list(expected_size):
+        fail(f"Embedded image dimensions {actual_size} do not match expected {list(expected_size)}")
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(raw)
+
+
+def generate_one(spec, default_source_url, index):
+    generated_path = spec.get("generated_image_path")
     if not generated_path:
         fail(f"generated_images[{index}] is missing generated_image_path")
+
+    output = ROOT / safe_public_path(generated_path)
+    embedded = spec.get("embedded_base64")
+    if embedded:
+        materialize_embedded_base64(embedded, output, spec.get("expected_size"))
+        print(f"Materialized approved embedded social image: {generated_path}")
+        return
+
+    source_url = spec.get("source_image_url") or default_source_url
+    transform = spec.get("image_transform")
+    if not source_url:
+        fail(f"generated_images[{index}] is missing source_image_url or embedded_base64")
 
     transform_fn = TRANSFORMS.get(transform)
     if not transform_fn:
         fail(f"Unsupported image_transform for generated_images[{index}]: {transform}")
 
-    output = ROOT / safe_public_path(generated_path)
     temp = ROOT / f".tmp_da_nina_source_image_{index}"
     try:
         download_source(source_url, temp)
@@ -133,7 +158,6 @@ def main():
             generate_one(spec, data.get("source_image_url"), index)
         return 0
 
-    # Backward-compatible single-image request format.
     source_url = data.get("source_image_url")
     generated_path = data.get("generated_image_path")
     transform = data.get("image_transform")
