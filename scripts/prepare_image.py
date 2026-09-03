@@ -32,15 +32,22 @@ def safe_public_path(value):
     return p
 
 
+def safe_embedded_part_path(value):
+    p = Path(value)
+    if p.is_absolute() or ".." in p.parts:
+        fail("embedded_base64_parts paths must be safe relative paths")
+    normalized = str(p).replace("\\", "/")
+    if not normalized.startswith("assets/embedded/"):
+        fail("embedded_base64_parts must be under assets/embedded/")
+    return p
+
+
 def download_source(url, destination):
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme != "https" or parsed.hostname not in ALLOWED_SOURCE_HOSTS:
         fail("source_image_url must be HTTPS and hosted on daninas.com")
 
-    req = urllib.request.Request(
-        url,
-        headers={"User-Agent": "DaNinaSocialPublisher/1.0"},
-    )
+    req = urllib.request.Request(url, headers={"User-Agent": "DaNinaSocialPublisher/1.0"})
     with urllib.request.urlopen(req, timeout=60) as response:
         content_type = response.headers.get("Content-Type", "")
         if response.status != 200 or not content_type.startswith("image/"):
@@ -92,7 +99,7 @@ def materialize_embedded_base64(encoded, output, expected_size=None):
     try:
         raw = base64.b64decode(encoded, validate=True)
     except Exception as exc:
-        fail(f"Invalid embedded_base64: {exc}")
+        fail(f"Invalid embedded base64: {exc}")
 
     try:
         with Image.open(io.BytesIO(raw)) as img:
@@ -100,13 +107,23 @@ def materialize_embedded_base64(encoded, output, expected_size=None):
         with Image.open(io.BytesIO(raw)) as img:
             actual_size = list(img.size)
     except Exception as exc:
-        fail(f"embedded_base64 is not a valid image: {exc}")
+        fail(f"Embedded base64 is not a valid image: {exc}")
 
     if expected_size is not None and actual_size != list(expected_size):
         fail(f"Embedded image dimensions {actual_size} do not match expected {list(expected_size)}")
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(raw)
+
+
+def read_embedded_parts(parts):
+    if not isinstance(parts, list) or not parts:
+        fail("embedded_base64_parts must be a non-empty list")
+    chunks = []
+    for value in parts:
+        part_path = ROOT / safe_embedded_part_path(value)
+        chunks.append(part_path.read_text(encoding="ascii").strip())
+    return "".join(chunks)
 
 
 def generate_one(spec, default_source_url, index):
@@ -116,15 +133,17 @@ def generate_one(spec, default_source_url, index):
 
     output = ROOT / safe_public_path(generated_path)
     embedded = spec.get("embedded_base64")
-    if embedded:
-        materialize_embedded_base64(embedded, output, spec.get("expected_size"))
+    parts = spec.get("embedded_base64_parts")
+    if embedded or parts:
+        encoded = embedded if embedded else read_embedded_parts(parts)
+        materialize_embedded_base64(encoded, output, spec.get("expected_size"))
         print(f"Materialized approved embedded social image: {generated_path}")
         return
 
     source_url = spec.get("source_image_url") or default_source_url
     transform = spec.get("image_transform")
     if not source_url:
-        fail(f"generated_images[{index}] is missing source_image_url or embedded_base64")
+        fail(f"generated_images[{index}] is missing source_image_url or embedded image data")
 
     transform_fn = TRANSFORMS.get(transform)
     if not transform_fn:
@@ -168,15 +187,7 @@ def main():
     if not generated_path:
         fail("generated_image_path is required when source_image_url is used")
 
-    generate_one(
-        {
-            "source_image_url": source_url,
-            "generated_image_path": generated_path,
-            "image_transform": transform,
-        },
-        None,
-        0,
-    )
+    generate_one({"source_image_url": source_url, "generated_image_path": generated_path, "image_transform": transform}, None, 0)
     return 0
 
 
