@@ -2,10 +2,24 @@
   "approved_by_user": true,
   "publish_mode": "live",
   "confirmation": "PUBLISH_DA_NINA",
-  "targets": ["instagram_story"],
+  "targets": ["instagram"],
+  "generated_images": [
+    {
+      "generated_image_path": "public/labor-day-2026-instagram-4x5-normalized.jpg",
+      "embedded_base64_parts": [
+        "assets/embedded/labor-day-2026/instagram-q10/part-00.b64",
+        "assets/embedded/labor-day-2026/instagram-q10/part-01.b64",
+        "assets/embedded/labor-day-2026/instagram-q10/part-02.b64",
+        "assets/embedded/labor-day-2026/instagram-q10/part-03.b64",
+        "assets/embedded/labor-day-2026/instagram-q10/part-04.b64"
+      ],
+      "expected_size": [1080, 1350],
+      "normalize_jpeg": true
+    }
+  ],
   "platform_images": {
-    "instagram_story": {"image_path": "public/labor-day-2026-instagram-4x5.jpg"}
+    "instagram": {"image_path": "public/labor-day-2026-instagram-4x5-normalized.jpg"}
   },
   "caption": "Labor Day is almost here! 🇺🇸🍝🍷\n\nDa Nina will be OPEN for Lunch & Dinner this Labor Day — Monday, September 7.\n\nCelebrate with us and enjoy 10% OFF YOUR BILL.\n\nReserve your table at www.daninas.com\n\n📍 1 Lafayette Avenue, Suffern, NY 10901\n📞 (845) 357-5988\n\n#DaNina #LaborDay #SuffernNY #ItalianRestaurant #RocklandCounty #ItalianFood",
-  "note": "Isolated Instagram Story publication. Feed attempts returned Meta HTTP 500 before any container or publication ID, so this target is safe from duplication."
+  "note": "Materially distinct retry using the exact approved 1080x1350 artwork re-encoded as a baseline RGB JPEG without changing its visual content. Prior attempts returned Meta transient HTTP 500 before any container/publication ID."
 }
