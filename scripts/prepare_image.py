@@ -95,7 +95,7 @@ TRANSFORMS = {
 }
 
 
-def materialize_embedded_base64(encoded, output, expected_size=None):
+def materialize_embedded_base64(encoded, output, expected_size=None, normalize_jpeg=False):
     try:
         raw = base64.b64decode(encoded, validate=True)
     except Exception as exc:
@@ -113,7 +113,22 @@ def materialize_embedded_base64(encoded, output, expected_size=None):
         fail(f"Embedded image dimensions {actual_size} do not match expected {list(expected_size)}")
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_bytes(raw)
+    if normalize_jpeg:
+        try:
+            with Image.open(io.BytesIO(raw)) as img:
+                normalized = img.convert("RGB")
+                normalized.save(
+                    output,
+                    "JPEG",
+                    quality=95,
+                    subsampling=0,
+                    optimize=True,
+                    progressive=False,
+                )
+        except Exception as exc:
+            fail(f"Could not normalize approved JPEG: {exc}")
+    else:
+        output.write_bytes(raw)
 
 
 def read_embedded_parts(parts):
@@ -136,8 +151,14 @@ def generate_one(spec, default_source_url, index):
     parts = spec.get("embedded_base64_parts")
     if embedded or parts:
         encoded = embedded if embedded else read_embedded_parts(parts)
-        materialize_embedded_base64(encoded, output, spec.get("expected_size"))
-        print(f"Materialized approved embedded social image: {generated_path}")
+        materialize_embedded_base64(
+            encoded,
+            output,
+            spec.get("expected_size"),
+            bool(spec.get("normalize_jpeg", False)),
+        )
+        action = "Normalized" if spec.get("normalize_jpeg") else "Materialized"
+        print(f"{action} approved embedded social image: {generated_path}")
         return
 
     source_url = spec.get("source_image_url") or default_source_url
