@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       request_file:
-        description: 'Existing request JSON to publish'
+        description: 'Existing request JSON to publish or delete'
         required: true
         type: string
 
@@ -74,7 +74,12 @@ jobs:
               echo "Refusing unsafe request path: $request_file" >&2
               exit 1
             fi
-            python scripts/prepare_image.py "$request_file"
+            action="$(python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("action", "publish"))' "$request_file")"
+            if [[ "$action" != "delete" ]]; then
+              python scripts/prepare_image.py "$request_file"
+            else
+              echo "Deletion request: skipping image preparation"
+            fi
           done < /tmp/da_nina_requests.txt
 
           if [[ -n "$(git status --porcelain -- public/)" ]]; then
@@ -85,10 +90,9 @@ jobs:
             git push origin HEAD:main
           fi
 
-          # Use the exact commit that now contains all generated public assets.
           echo "PUBLISH_ASSET_REF=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
-      - name: Publish approved request(s)
+      - name: Process approved request(s)
         shell: bash
         env:
           META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
@@ -103,5 +107,10 @@ jobs:
               exit 1
             fi
             echo "Processing $request_file"
-            python scripts/publish_social.py "$request_file"
+            action="$(python -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("action", "publish"))' "$request_file")"
+            if [[ "$action" == "delete" ]]; then
+              python scripts/delete_social.py "$request_file"
+            else
+              python scripts/publish_social.py "$request_file"
+            fi
           done < /tmp/da_nina_requests.txt
