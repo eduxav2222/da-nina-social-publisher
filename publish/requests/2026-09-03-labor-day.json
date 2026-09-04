@@ -3,7 +3,25 @@
   "publish_mode": "live",
   "confirmation": "PUBLISH_DA_NINA",
   "targets": ["instagram"],
-  "image_url": "https://drive.google.com/uc?export=view&id=1JkmloLFQ4Q1scFUGMuFmxQdLu8y1YZcU",
+  "generated_images": [
+    {
+      "generated_image_path": "public/labor-day-2026-instagram-4x5-final.jpg",
+      "embedded_base64_parts": [
+        "assets/embedded/labor-day-2026/original-drive-400q15/part-00.b64",
+        "assets/embedded/labor-day-2026/original-drive-400q15/part-01.b64",
+        "assets/embedded/labor-day-2026/original-drive-400q15/part-02.b64",
+        "assets/embedded/labor-day-2026/original-drive-400q15/part-03.b64",
+        "assets/embedded/labor-day-2026/original-drive-400q15/part-04a.b64",
+        "assets/embedded/labor-day-2026/original-drive-400q15/part-04b.b64",
+        "assets/embedded/labor-day-2026/original-drive-400q15/part-05.b64",
+        "assets/embedded/labor-day-2026/original-drive-400q15/part-06.b64",
+        "assets/embedded/labor-day-2026/original-drive-400q15/part-07a.b64",
+        "assets/embedded/labor-day-2026/original-drive-400q15/part-07b.b64"
+      ],
+      "expected_size": [400, 500]
+    }
+  ],
+  "image_url": "https://raw.githubusercontent.com/eduxav2222/da-nina-social-publisher/main/public/labor-day-2026-instagram-4x5-final.jpg",
   "caption": "Labor Day is almost here! 🇺🇸🍝🍷\n\nDa Nina will be OPEN for Lunch & Dinner this Labor Day — Monday, September 7.\n\nCelebrate with us and enjoy 10% OFF YOUR BILL.\n\nReserve your table at www.daninas.com\n\n📍 1 Lafayette Avenue, Suffern, NY 10901\n📞 (845) 357-5988\n\n#DaNina #LaborDay #SuffernNY #ItalianRestaurant #RocklandCounty #ItalianFood",
-  "note": "Approved Labor Day 2026 Instagram Feed using the exact original approved Drive artwork."
+  "note": "Instagram Feed only. Exact approved Labor Day artwork recovered from Drive, deterministically resized to 400x500 for reliable public delivery to Meta."
 }
