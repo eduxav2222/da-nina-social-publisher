@@ -1,0 +1,19 @@
+{
+  "campaign": "labor-day-2026",
+  "approved_by_user": true,
+  "publish_mode": "live",
+  "confirmation": "PUBLISH_DA_NINA",
+  "caption": "Labor Day is almost here! 🇺🇸🍝🍷\n\nDa Nina will be OPEN for Lunch & Dinner this Labor Day — Monday, September 7.\n\nCelebrate with us and enjoy 10% OFF YOUR BILL.\n\nReserve your table at www.daninas.com\n\n📍 1 Lafayette Avenue, Suffern, NY 10901\n📞 (845) 357-5988\n\n#DaNina #LaborDay #SuffernNY #ItalianRestaurant #RocklandCounty #ItalianFood",
+  "instagram": {
+    "enabled": true,
+    "image_source": "public/labor-day-2026-instagram-4x5.png",
+    "feed": true,
+    "story": true
+  },
+  "facebook": {
+    "enabled": true,
+    "image_source": "public/labor-day-2026-facebook-1x1.png",
+    "feed": true,
+    "story": true
+  }
+}
