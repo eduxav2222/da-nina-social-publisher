@@ -1,0 +1,13 @@
+{
+  "action": "delete",
+  "approved_by_user": true,
+  "delete_mode": "live",
+  "confirmation": "DELETE_DA_NINA",
+  "objects": {
+    "instagram": ["18087366989660843"],
+    "instagram_story": ["18114293053961783"],
+    "facebook": ["190178247659662_1608293854422774", "1608293834422776"],
+    "facebook_story": ["2293092914782557", "1608294181089408"]
+  },
+  "note": "User explicitly requested immediate removal of all Labor Day publications because the published images were low resolution."
+}
