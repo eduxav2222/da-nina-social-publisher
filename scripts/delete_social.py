@@ -39,9 +39,9 @@ def graph_request(method, graph_version, endpoint, token, params=None):
         raise RuntimeError(f"connection error: {exc}")
 
 
-def try_get(version, endpoint, token):
+def try_get(version, endpoint, token, fields="id"):
     try:
-        return graph_request("GET", version, endpoint, token, {"fields": "id"})
+        return graph_request("GET", version, endpoint, token, {"fields": fields})
     except Exception:
         return None
 
@@ -71,10 +71,9 @@ def delete_one(version, object_id, token, label):
         result = graph_request("DELETE", version, object_id, token)
         print(f"DELETE_RESULT {label} {object_id}=" + json.dumps(result, ensure_ascii=False))
     except Exception as exc:
-        # If the object is already inaccessible, treat it as already removed.
         after_error_check = try_get(version, object_id, token)
         if before is None and after_error_check is None:
-            print(f"DELETE_ALREADY_GONE {label} {object_id}: {exc}")
+            print(f"DELETE_ALREADY_INACCESSIBLE {label} {object_id}: {exc}")
             return True
         print(f"DELETE_FAILED {label} {object_id}: {exc}", file=sys.stderr)
         return False
@@ -83,12 +82,55 @@ def delete_one(version, object_id, token, label):
     if after is None:
         print(f"DELETE_VERIFIED {label} {object_id}: inaccessible after deletion")
         return True
-    # Some Meta deletes return success while reads remain briefly available; trust explicit success.
     if result.get("success") is True:
         print(f"DELETE_ACCEPTED {label} {object_id}: Meta returned success=true")
         return True
     print(f"DELETE_UNVERIFIED {label} {object_id}: object still readable", file=sys.stderr)
     return False
+
+
+def find_active_facebook_story(config, version, page_token, target_ids):
+    page_id = config["facebook_page_id"]
+    try:
+        data = graph_request(
+            "GET", version, f"{page_id}/stories", page_token,
+            {"fields": "status,creation_time,media_id,post_id,url", "limit": "50"},
+        )
+    except Exception as exc:
+        print(f"FACEBOOK_STORY_VERIFY_ERROR={exc}", file=sys.stderr)
+        return None
+    targets = {str(x) for x in target_ids}
+    matches = []
+    for story in data.get("data", []):
+        if str(story.get("post_id")) in targets or str(story.get("media_id")) in targets or str(story.get("id")) in targets:
+            matches.append(story)
+    print("FACEBOOK_STORY_ACTIVE_MATCHES=" + json.dumps(matches, ensure_ascii=False))
+    return matches
+
+
+def find_instagram_media(config, version, token, target_feed_ids, target_story_ids):
+    ig_id = config["instagram_business_account_id"]
+    report = {"feed_matches": None, "story_matches": None}
+    try:
+        feed = graph_request(
+            "GET", version, f"{ig_id}/media", token,
+            {"fields": "id,media_type,permalink,timestamp", "limit": "50"},
+        )
+        targets = {str(x) for x in target_feed_ids}
+        report["feed_matches"] = [m for m in feed.get("data", []) if str(m.get("id")) in targets]
+    except Exception as exc:
+        print(f"INSTAGRAM_FEED_VERIFY_ERROR={exc}", file=sys.stderr)
+    try:
+        stories = graph_request(
+            "GET", version, f"{ig_id}/stories", token,
+            {"fields": "id,media_type,permalink,timestamp", "limit": "50"},
+        )
+        targets = {str(x) for x in target_story_ids}
+        report["story_matches"] = [m for m in stories.get("data", []) if str(m.get("id")) in targets]
+    except Exception as exc:
+        print(f"INSTAGRAM_STORY_VERIFY_ERROR={exc}", file=sys.stderr)
+    print("INSTAGRAM_ACTIVE_REPORT=" + json.dumps(report, ensure_ascii=False))
+    return report
 
 
 def main():
@@ -118,17 +160,34 @@ def main():
     objects = request.get("objects", {})
     failures = []
 
-    # Facebook first so the Page feed/story disappear immediately.
     for label in ("facebook_story", "facebook"):
         for object_id in objects.get(label, []):
             if not delete_one(version, object_id, page_token, label):
                 failures.append((label, object_id))
 
-    # Instagram published media IDs use the system/user token that created them.
+    # Instagram published Business media cannot normally be deleted through the Graph API,
+    # but attempt the requested IDs once and then verify whether they remain active.
     for label in ("instagram_story", "instagram"):
         for object_id in objects.get(label, []):
             if not delete_one(version, object_id, token, label):
                 failures.append((label, object_id))
+
+    fb_story_matches = find_active_facebook_story(config, version, page_token, objects.get("facebook_story", []))
+    ig_report = find_instagram_media(
+        config, version, token,
+        objects.get("instagram", []), objects.get("instagram_story", []),
+    )
+
+    if fb_story_matches == []:
+        print("FACEBOOK_STORY_REMOVAL_CONFIRMED=true")
+        failures = [f for f in failures if f[0] != "facebook_story"]
+
+    if ig_report.get("feed_matches") == []:
+        failures = [f for f in failures if f[0] != "instagram"]
+        print("INSTAGRAM_FEED_REMOVAL_CONFIRMED=true")
+    if ig_report.get("story_matches") == []:
+        failures = [f for f in failures if f[0] != "instagram_story"]
+        print("INSTAGRAM_STORY_REMOVAL_CONFIRMED=true")
 
     if failures:
         print("DELETE_FAILURES=" + json.dumps(failures), file=sys.stderr)
