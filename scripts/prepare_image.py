@@ -7,7 +7,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageFile
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_SOURCE_HOSTS = {"daninas.com", "www.daninas.com"}
@@ -115,8 +117,6 @@ def materialize_embedded_base64(encoded, output, expected_size=None, normalize_j
         fail(f"Invalid embedded base64: {exc}")
 
     try:
-        with Image.open(io.BytesIO(raw)) as img:
-            img.verify()
         with Image.open(io.BytesIO(raw)) as img:
             actual_size = list(img.size)
     except Exception as exc:
