@@ -95,7 +95,20 @@ TRANSFORMS = {
 }
 
 
-def materialize_embedded_base64(encoded, output, expected_size=None, normalize_jpeg=False):
+def facebook_square_bands(img):
+    if img.size != (1080, 1350):
+        fail(f"Facebook square source must be 1080x1350; got {img.size}")
+    header = img.crop((0, 0, 1080, 510)).resize((1080, 430), Image.Resampling.LANCZOS)
+    food = img.crop((0, 510, 1080, 1160)).resize((1080, 510), Image.Resampling.LANCZOS)
+    footer = img.crop((0, 1160, 1080, 1350)).resize((1080, 140), Image.Resampling.LANCZOS)
+    rendered = Image.new("RGB", (1080, 1080))
+    rendered.paste(header, (0, 0))
+    rendered.paste(food, (0, 430))
+    rendered.paste(footer, (0, 940))
+    return rendered
+
+
+def materialize_embedded_base64(encoded, output, expected_size=None, normalize_jpeg=False, postprocess=None):
     try:
         raw = base64.b64decode(encoded, validate=True)
     except Exception as exc:
@@ -109,22 +122,29 @@ def materialize_embedded_base64(encoded, output, expected_size=None, normalize_j
     except Exception as exc:
         fail(f"Embedded base64 is not a valid image: {exc}")
 
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    if postprocess:
+        if postprocess != "instagram_4x5_to_facebook_square_bands_v1":
+            fail(f"Unsupported embedded postprocess: {postprocess}")
+        try:
+            with Image.open(io.BytesIO(raw)) as img:
+                rendered = facebook_square_bands(img.convert("RGB"))
+                if expected_size is not None and list(rendered.size) != list(expected_size):
+                    fail(f"Rendered image dimensions {list(rendered.size)} do not match expected {list(expected_size)}")
+                rendered.save(output, "JPEG", quality=95, subsampling=0, optimize=True, progressive=False)
+        except Exception as exc:
+            fail(f"Could not postprocess approved embedded image: {exc}")
+        return
+
     if expected_size is not None and actual_size != list(expected_size):
         fail(f"Embedded image dimensions {actual_size} do not match expected {list(expected_size)}")
 
-    output.parent.mkdir(parents=True, exist_ok=True)
     if normalize_jpeg:
         try:
             with Image.open(io.BytesIO(raw)) as img:
                 normalized = img.convert("RGB")
-                normalized.save(
-                    output,
-                    "JPEG",
-                    quality=95,
-                    subsampling=0,
-                    optimize=True,
-                    progressive=False,
-                )
+                normalized.save(output, "JPEG", quality=95, subsampling=0, optimize=True, progressive=False)
         except Exception as exc:
             fail(f"Could not normalize approved JPEG: {exc}")
     else:
@@ -156,8 +176,9 @@ def generate_one(spec, default_source_url, index):
             output,
             spec.get("expected_size"),
             bool(spec.get("normalize_jpeg", False)),
+            spec.get("postprocess"),
         )
-        action = "Normalized" if spec.get("normalize_jpeg") else "Materialized"
+        action = "Postprocessed" if spec.get("postprocess") else ("Normalized" if spec.get("normalize_jpeg") else "Materialized")
         print(f"{action} approved embedded social image: {generated_path}")
         return
 
