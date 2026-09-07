@@ -1,0 +1,33 @@
+{
+  "approved_by_user": true,
+  "publish_mode": "live",
+  "confirmation": "PUBLISH_DA_NINA",
+  "targets": ["instagram", "facebook"],
+  "generated_images": [
+    {
+      "generated_image_path": "public/labor-day-2026-instagram-4x5-q15.jpg",
+      "embedded_base64_parts": [
+        "assets/embedded/2026-09-07-labor-day-instagram-q15.part01.b64",
+        "assets/embedded/2026-09-07-labor-day-instagram-q15.part02.b64",
+        "assets/embedded/2026-09-07-labor-day-instagram-q15.part03.b64",
+        "assets/embedded/2026-09-07-labor-day-instagram-q15.part04.b64",
+        "assets/embedded/2026-09-07-labor-day-instagram-q15.part05.b64"
+      ],
+      "expected_size": [1080, 1350]
+    },
+    {
+      "generated_image_path": "public/labor-day-2026-facebook-1x1-q15.jpg",
+      "embedded_base64_parts": [
+        "assets/embedded/2026-09-07-labor-day-facebook-q15.part01.b64",
+        "assets/embedded/2026-09-07-labor-day-facebook-q15.part02.b64"
+      ],
+      "expected_size": [1080, 1080]
+    }
+  ],
+  "platform_images": {
+    "instagram": {"image_path": "public/labor-day-2026-instagram-4x5-q15.jpg"},
+    "facebook": {"image_path": "public/labor-day-2026-facebook-1x1-q15.jpg"}
+  },
+  "caption": "🇺🇸 We’re OPEN TODAY for Labor Day!\n\nJoin us at Da Nina for lunch or dinner and enjoy 10% OFF YOUR BILL today.\n\nGreat Italian food, good company, and a perfect way to spend the holiday. 🍝\n\n📍 1 Lafayette Avenue, Suffern, NY 10901\n📞 (845) 357-5988\n🌐 www.daninas.com\n\n#DaNina #LaborDay #SuffernNY #ItalianRestaurant #RocklandCounty #ItalianFood #Lunch #Dinner",
+  "note": "User explicitly approved live publishing to Instagram and Facebook on 2026-09-07. Use the approved platform-specific feed artwork."
+}
