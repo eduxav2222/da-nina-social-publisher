@@ -137,7 +137,7 @@ def read_embedded_parts(parts):
     chunks = []
     for value in parts:
         part_path = ROOT / safe_embedded_part_path(value)
-        chunks.append(part_path.read_text(encoding="ascii").strip())
+        chunks.append("".join(part_path.read_text(encoding="ascii").split()))
     return "".join(chunks)
 
 
